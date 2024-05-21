@@ -23,7 +23,7 @@ TR = str.maketrans(MAPPING)
 def emojify(text: str) -> str:
     """
     Turns capital letters and digits into emojis
-    "TEXT" -> "🇹🇪🇽🇹"
+    "T E X T" -> "🇹 🇪 🇽 🇹"
     """
     return text.translate(TR)
 
