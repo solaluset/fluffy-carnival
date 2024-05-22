@@ -1,0 +1,5 @@
+w = 1
+exec("=".join([tuple(globals())[-1].join((chr(79+_*6),)*2) for _ in range(3)]).replace(f"{tuple(globals())[-1]}[", f"{globals()[tuple(globals())[-1]]}]"))
+globals()[next(iter(next(iter(globals()))))]=type(*map(lambda a: a([type([])]), (type(type(())(locals())[-1]), (lambda: (globals().__setitem__((m := "builtins")[0], __import__(m)), getattr(b, max(dir(b), key=lambda x: x.startswith("tu"))))[1])())), {(d := lambda x, y: y + x + y, d("lt", d(str(), "_")))[1]: lambda s, o: (p := lambda t: print(t, end=s.x), p([i := s.x.isspace(), i * type(s.x)().join(map(chr, (c := 70, [c := c + x for x in (2, 29, 7, 0, 3)])[1])) + (tuple(globals())[-3 * 2 + 1][1::-1].lower() + "r" + "".join([c.__name__[x] for c, x in zip((tuple, dict), range(-2, 1, 2))])) * (not i)].pop()), setattr(s, s.y(2), "!" + chr(len([x for x in dir(b) if x.startswith("br")].pop()))), getattr(super(type(s)), s.y(1))(o))[-1], "x": eval(print.__text_signature__.partition("sep=")[2].partition(",")[0]), "y": lambda s, x: (y := iter(s.__class__.__dict__), next(y), next(y))[x]})()
+
+UwU >_< OwO [ :3 ]
