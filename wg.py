@@ -10,17 +10,29 @@ from configparser import ConfigParser
 CONFIGS_PATH = os.path.expanduser(
     os.path.join("~", "algo", "configs", "localhost", "wireguard")
 )
-IP_PATTERN = re.compile("allowed ips: ([^/]+)/32")
+IP_PATTERN = re.compile("allowed ips: ([^$]+)$")
 COLOR_PATTERN = re.compile("\x1b[^m]+m")
 
 
-def collect_addresses(directory: str) -> dict[str, str]:
+def _invert_dict(d: dict) -> dict:
+    result = {}
+    for k, v in d.items():
+        for i in v:
+            result[i] = k
+    return result
+
+
+def _split_ips(text: str) -> list[str]:
+    return [ip.strip() for ip in text.split(",")]
+
+
+def collect_addresses(directory: str) -> dict[str, list[str]]:
     addresses = {}
     for file in os.listdir(directory):
         if file.endswith(".conf"):
             parser = ConfigParser()
             parser.read(os.path.join(directory, file))
-            addresses[file] = parser["Interface"]["Address"]
+            addresses[file] = _split_ips(parser["Interface"]["Address"])
     return addresses
 
 
@@ -37,11 +49,13 @@ def _patch_part(part: str, address_mapping: dict[str, str]) -> str:
     ip_match = IP_PATTERN.search(clean_part)
     if not ip_match:
         return part
-    ip = ip_match.group(1)
-    if ip not in address_mapping:
-        return part
-    peer = clean_part.split(None, 3)[1]
-    return part.replace(peer, address_mapping[ip], 1)
+    ips = _split_ips(ip_match.group(1))
+    for ip in ips:
+        ip = ip.partition("/")[0]
+        if ip in address_mapping:
+            peer = clean_part.split(None, 3)[1]
+            return part.replace(peer, address_mapping[ip], 1)
+    return part
 
 
 def patch_wg_output(output: str, address_mapping: dict[str, str]) -> str:
@@ -54,7 +68,7 @@ def main():
     print(
         patch_wg_output(
             get_wg_output(),
-            {v: k for k, v in collect_addresses(CONFIGS_PATH).items()},
+            _invert_dict(collect_addresses(CONFIGS_PATH)),
         ),
         end="",
     )
