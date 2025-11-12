@@ -3,6 +3,7 @@
 
 import os
 import re
+import sys
 import subprocess
 from configparser import ConfigParser
 
@@ -65,13 +66,13 @@ def patch_wg_output(output: str, address_mapping: dict[str, str]) -> str:
 
 
 def main():
-    print(
-        patch_wg_output(
-            get_wg_output(),
-            _invert_dict(collect_addresses(CONFIGS_PATH)),
-        ),
-        end="",
+    output = patch_wg_output(
+        get_wg_output(),
+        _invert_dict(collect_addresses(CONFIGS_PATH)),
     )
+    if not sys.stdout.isatty():
+        output = COLOR_PATTERN.sub("", output)
+    print(output, end="")
 
 
 if __name__ == "__main__":
