@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
 """
-This progrma turns keyboard backlight off when keyboard is idle.
-Requires tuxedo_keuboard and xinput.
+This program turns keyboard backlight off when keyboard is idle
+Requires tuxedo-drivers and xinput
 """
 
 import os
@@ -16,11 +16,17 @@ from functools import partial
 from concurrent.futures import Future
 
 
+TIMEOUT = 60
+TICK_DURATION = 0.01
+
 BASE_DIR = "/sys/devices/platform/tuxedo_keyboard/leds/rgb:kbd_backlight"
 COLOR_FILE = BASE_DIR + "/multi_intensity"
 BRIGHTNESS_FILE = BASE_DIR + "/brightness"
-TIMEOUT = 60
-TICK_DURATION = 0.01
+
+DATA_DIR = "/etc/kbsv"
+SAVED_COLOR_FILE = DATA_DIR + "/saved_color"
+SAVED_BRIGHTNESS_FILE = DATA_DIR + "/saved_brightness"
+
 X_PROGRAM = os.path.split(os.readlink(shutil.which("X")))[1]
 IGNORE_USERS = ("lightdm",)
 
@@ -28,30 +34,15 @@ IGNORE_USERS = ("lightdm",)
 async def aout(cmd, **kwargs):
     return await asyncio.get_running_loop().run_in_executor(
         None,
-        partial(
-            subprocess.check_output,
+        lambda: subprocess.run(
             cmd,
+            check=kwargs.pop("check", True),
             text=True,
+            stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             **kwargs,
-        ),
+        ).stdout,
     )
-
-
-async def run_as_daemon(func, *args):
-    future = Future()
-    future.set_running_or_notify_cancel()
-
-    def daemon():
-        try:
-            result = func(*args)
-        except BaseException as e:
-            future.set_exception(e)
-        else:
-            future.set_result(result)
-
-    threading.Thread(target=daemon, daemon=True).start()
-    return await asyncio.wrap_future(future)
 
 
 class Session:
@@ -132,13 +123,23 @@ class Session:
             stdout=subprocess.PIPE,
             env=env,
         )
-        while await run_as_daemon(process.stdout.readline):
-            timer_task.cancel()
-            await BacklightManager.turn_on()
+        try:
+            while await asyncio.get_running_loop().run_in_executor(
+                None, process.stdout.readline
+            ):
+                timer_task.cancel()
+                await BacklightManager.turn_on()
+        finally:
+            process.send_signal(signal.SIGTERM)
 
     async def start(self):
         if self._task is None:
             self._task = asyncio.create_task(self.listen())
+
+    def stop(self):
+        if self._task is not None:
+            self._task.cancel()
+            self._task = None
 
     @classmethod
     async def _bind_pid(cls, pid):
@@ -215,7 +216,7 @@ class Session:
                 await session.start()
                 return False
         cls._last_session = None
-        for x_pid in (await aout(("pidof", X_PROGRAM))).split():
+        for x_pid in (await aout(("pidof", X_PROGRAM), check=False)).split():
             await cls._bind_pid(x_pid)
         refreshed_sessions = await cls.get_session_names()
         for name in refreshed_sessions:
@@ -225,6 +226,11 @@ class Session:
                     cls._last_session = session
                     await session.start()
         return True
+
+    @classmethod
+    def stop_sessions(cls):
+        for name in list(cls._sessions):
+            cls._sessions.pop(name).stop()
 
 
 class BacklightManager:
@@ -293,7 +299,7 @@ async def timer():
 async def main():
     global timer_task
 
-    while True:
+    while is_running:
         timer_task = asyncio.create_task(timer())
         try:
             await timer_task
@@ -302,39 +308,43 @@ async def main():
 
 
 def at_exit():
+    Session.stop_sessions()
     BacklightManager.stop()
-    with open("/etc/saved_keyboard_state", "r") as f:
-        state = f.read().strip()
-    if state == "1":
-        if BacklightManager.is_off:
-            brightness = str(BacklightManager.saved_brightness)
-        else:
-            with open(BRIGHTNESS_FILE, "r") as f:
-                brightness = f.read()
-        with open("/etc/saved_keyboard_brightness", "w") as f:
+    if BacklightManager.is_off:
+        brightness = str(BacklightManager.saved_brightness)
+        with open(BRIGHTNESS_FILE, "w") as f:
             f.write(brightness)
-    with open(COLOR_FILE, "r") as f1, open(
-        "/etc/saved_keyboard_color", "w"
-    ) as f2:
+    else:
+        with open(BRIGHTNESS_FILE, "r") as f:
+            brightness = f.read()
+    with open(SAVED_BRIGHTNESS_FILE, "w") as f:
+        f.write(brightness)
+    with open(COLOR_FILE, "r") as f1, open(SAVED_COLOR_FILE, "w") as f2:
         f2.write(f1.read())
 
 
-def sigterm(sig, fr):
-    exit(0)
+is_running = True
+
+
+def shutdown(sig, fr):
+    global is_running
+
+    is_running = False
+    asyncio.get_running_loop().call_soon_threadsafe(timer_task.cancel)
 
 
 if __name__ == "__main__":
     atexit.register(at_exit)
-    signal.signal(signal.SIGTERM, sigterm)
+    signal.signal(signal.SIGINT, shutdown)
+    signal.signal(signal.SIGTERM, shutdown)
 
-    with open("/etc/saved_keyboard_color", "r") as f1, open(
-        COLOR_FILE, "w"
-    ) as f2:
-        f2.write(f1.read())
-    with open("/etc/saved_keyboard_state", "r") as f:
-        state = f.read().strip()
-    if state == "1":
-        with open("/etc/saved_keyboard_brightness", "r") as f1, open(
+    os.makedirs(DATA_DIR, exist_ok=True)
+
+    if os.path.isfile(SAVED_COLOR_FILE):
+        with open(SAVED_COLOR_FILE, "r") as f1, open(COLOR_FILE, "w") as f2:
+            f2.write(f1.read())
+    if os.path.isfile(SAVED_BRIGHTNESS_FILE):
+        with open(SAVED_BRIGHTNESS_FILE, "r") as f1, open(
             BRIGHTNESS_FILE, "w"
         ) as f2:
             f2.write(f1.read())
