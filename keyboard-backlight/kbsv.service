@@ -1,0 +1,8 @@
+[Unit]
+Description=Keyboard backlight management
+
+[Service]
+ExecStart=/etc/kbsv/kbsv.py
+
+[Install]
+WantedBy=sysinit.target
