@@ -1,0 +1,16 @@
+#!/bin/sh
+
+if echo "$1" | grep -q '^Password'; then
+  stty -echo --file=$TTY || exit 1
+  printf "Password: " > $TTY
+  read -r password < $TTY
+  # put a newline to separate prompt and output
+  echo > $TTY
+  stty echo --file=$TTY
+  echo "$password" | python3 "$(dirname "$0")/encryptor.py" -a decrypt "$GIT_TOKEN_PATH"
+else
+  echo "$GIT_USERNAME"
+fi
+# exit successfully even if failed
+# otherwise git will ask for password again
+exit 0
