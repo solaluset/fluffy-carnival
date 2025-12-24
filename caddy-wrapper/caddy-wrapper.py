@@ -4,6 +4,7 @@ Wrapper script for simple reverse proxies with Caddy
 Automatically generates config and iptables rules
 """
 
+import os
 import sys
 import json
 import shlex
@@ -18,6 +19,7 @@ from dataclasses import dataclass
 CONFIG_FILE = "/home/caddy/proxies.txt"
 BASE_JSON = "/home/caddy/caddy.json.base"
 FINAL_JSON = "/home/caddy/caddy.json"
+BACKUP_JSON = FINAL_JSON + ".back"
 CADDY_EXE = "caddy"
 
 IPTABLES_COMMENT = json.dumps("By caddy-wrapper :3")
@@ -48,7 +50,7 @@ class ProxyRecord:
     def as_dict(self) -> dict:
         return {
             self.name: {
-                "listen": [f"{self.protocol}/[::]:{self.local_port}"],
+                "listen": [f"{self.protocol}/:{self.local_port}"],
                 "routes": [
                     {
                         "handle": [
@@ -90,6 +92,7 @@ def write_caddy_json(
     for record in proxies:
         config["apps"]["layer4"]["servers"].update(record.as_dict())
     with open(output_file, "w") as f:
+        os.chmod(output_file, 0o600)
         json.dump(config, f)
 
 
@@ -144,9 +147,18 @@ parser.add_argument("args", nargs=argparse.REMAINDER)
 def main(args: list[str]) -> None:
     args = parser.parse_args(args)
 
-    print("Generating config...")
-    proxies = parse_config(CONFIG_FILE)
-    write_caddy_json(BASE_JSON, proxies, FINAL_JSON)
+    has_backup = args.command == "reload" and os.path.isfile(FINAL_JSON)
+    if has_backup:
+        os.rename(FINAL_JSON, BACKUP_JSON)
+
+    try:
+        print("Generating config...")
+        proxies = parse_config(CONFIG_FILE)
+        write_caddy_json(BASE_JSON, proxies, FINAL_JSON)
+    except Exception:
+        if has_backup:
+            os.rename(BACKUP_JSON, FINAL_JSON)
+        raise
 
     print("Updating iptables...")
     update_iptables(proxies)
@@ -159,9 +171,22 @@ def main(args: list[str]) -> None:
         run_command(
             [CADDY_EXE, args.command, "--config", FINAL_JSON] + args.args
         )
+    except subprocess.CalledProcessError:
+        if has_backup:
+            print("Failure, restoring backup...")
+            os.rename(BACKUP_JSON, FINAL_JSON)
+            run_command(
+                [CADDY_EXE, args.command, "--config", FINAL_JSON] + args.args
+            )
+            print("Backup restored.")
+        raise
     finally:
         signal.signal(signal.SIGINT, original_sigint_handler)
         signal.signal(signal.SIGTERM, original_sigterm_handler)
+
+        if os.path.isfile(BACKUP_JSON):
+            os.remove(BACKUP_JSON)
+
         if args.command == "run":
             # done running, clear
             print("Restoring iptables...")
