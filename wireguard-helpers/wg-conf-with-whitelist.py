@@ -74,8 +74,8 @@ def main(argv: list[str]) -> None:
     with open(args.file) as f:
         config.read_file(f)
     addresses = group_by_version(collect_addresses(config, args.add))
-    addresses_v4 = addresses.pop(4)
-    addresses_v6 = addresses.pop(6)
+    addresses_v4 = addresses.pop(4, [])
+    addresses_v6 = addresses.pop(6, [])
     if addresses:
         raise ValueError(f"unknown IP versions: {list(addresses.keys())}")
     if platform == "linux":
