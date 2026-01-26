@@ -79,7 +79,9 @@ def parse_config(file: str) -> list[ProxyRecord]:
         return [
             ProxyRecord(name, int(port), Protocol(protocol), addr)
             for name, port, protocol, addr in (
-                line.split() for line in f if not line.lstrip().startswith("#")
+                line.split()
+                for line in map(str.strip, f)
+                if line and not line.startswith("#")
             )
         ]
 
