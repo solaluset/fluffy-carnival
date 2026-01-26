@@ -16,9 +16,9 @@ from enum import StrEnum
 from dataclasses import dataclass
 
 
-CONFIG_FILE = "/home/caddy/proxies.txt"
-BASE_JSON = "/home/caddy/caddy.json.base"
-FINAL_JSON = "/home/caddy/caddy.json"
+CONFIG_FILE = "proxies.txt"
+BASE_JSON = "caddy.json.base"
+FINAL_JSON = "caddy.json"
 BACKUP_JSON = FINAL_JSON + ".back"
 CADDY_EXE = "caddy"
 
