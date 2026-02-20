@@ -1,0 +1,13 @@
+[Unit]
+Description=Full VPN access whitelist
+After=ufw.service
+Wants=ufw.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=sh -c "~/.local/bin/full-vpn-whitelist.py start"
+ExecStop=sh -c "~/.local/bin/full-vpn-whitelist.py stop"
+
+[Install]
+WantedBy=default.target
