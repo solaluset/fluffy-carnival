@@ -1,17 +1,19 @@
 #!/bin/python3
 
-import os
 import sys
 import shlex
 import argparse
 import functools
 import subprocess
+from pathlib import Path
 from ipaddress import ip_address
 from configparser import ConfigParser
 
-ALGO_PATH = os.path.expanduser(os.path.join("~", "algo"))
-CONFIGS_PATH = os.path.join(ALGO_PATH, "configs", "localhost", "wireguard")
-WHITELIST_PATH = os.path.join(ALGO_PATH, "full-vpn-whitelist.txt")
+ALGO_PATH = Path("~").expanduser() / "algo"
+CONFIGS_PATH = ALGO_PATH / "configs" / "localhost"
+SERVER_IP = CONFIGS_PATH.readlink().name
+CONFIGS_PATH = CONFIGS_PATH / "wireguard"
+WHITELIST_PATH = ALGO_PATH / "full-vpn-whitelist.txt"
 WHITELIST_CHAIN_NAME = "full-vpn-whitelist"
 
 run_command = functools.partial(subprocess.check_output, text=True)
@@ -39,10 +41,10 @@ def clear_rules(iptables: str):
         run_command(["sudo", iptables, "-D", *line[1:]])
 
 
-def add_rule(iptables: str, source: str | None):
+def add_rule(iptables: str, address: str | None, option: str = "-s"):
     command = ["sudo", iptables, "-A", WHITELIST_CHAIN_NAME]
-    if source:
-        command.extend(["-s", source, "-j", "ACCEPT"])
+    if address:
+        command.extend([option, address, "-j", "ACCEPT"])
     else:
         command.extend(["-j", "DROP"])
     run_command(command)
@@ -56,7 +58,7 @@ def get_addresses(name: str) -> tuple[list[str], list[str]]:
     v4 = []
     v6 = []
     parser = ConfigParser()
-    parser.read(os.path.join(CONFIGS_PATH, name + ".conf"))
+    parser.read(CONFIGS_PATH / (name + ".conf"))
     for ip in _split_ips(parser["Interface"]["Address"]):
         version = ip_address(ip).version
         if version == 4:
@@ -76,6 +78,10 @@ def main(args: list[str]) -> None:
 
     clear_rules("iptables")
     clear_rules("ip6tables")
+
+    # always allow connecting to the server itself
+    # this has no IPv6 counterpart (yet)
+    add_rule("iptables", SERVER_IP, "-d")
 
     if args.command == "start":
         names = parse_config(WHITELIST_PATH)
