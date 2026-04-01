@@ -22,13 +22,21 @@ parser = argparse.ArgumentParser()
 parser.add_argument("command")
 
 
-def parse_config(file: str) -> list[str]:
+def parse_config(file: str) -> dict:
     with open(file) as f:
-        return [
+        lines = [
             line
             for line in map(str.strip, f)
             if line and not line.startswith("#")
         ]
+    config = {"users": []}
+    for line in lines:
+        if "=" in line:
+            key, _, value = line.partition("=")
+            config[key.strip()] = value.strip()
+        else:
+            config["users"].append(line)
+    return config
 
 
 def clear_rules(iptables: str):
@@ -41,12 +49,12 @@ def clear_rules(iptables: str):
         run_command(["sudo", iptables, "-D", *line[1:]])
 
 
-def add_rule(iptables: str, address: str | None, option: str = "-s"):
+def add_rule(iptables: str, option: str, address: str | None, jump: str):
     command = ["sudo", iptables, "-A", WHITELIST_CHAIN_NAME]
     if address:
-        command.extend([option, address, "-j", "ACCEPT"])
+        command.extend([option, address, "-j", jump])
     else:
-        command.extend(["-j", "DROP"])
+        command.extend(["-j", jump])
     run_command(command)
 
 
@@ -76,24 +84,29 @@ def main(args: list[str]) -> None:
     if args.command not in ("start", "stop"):
         raise ValueError("unknown command")
 
+    config = parse_config(WHITELIST_PATH)
+    list_jump = config.get("LIST_JUMP", "ACCEPT")
+    other_jump = config.get("OTHER_JUMP", "DROP")
+    server_ip_v6 = config.get("IPv6_SERVER_ADDRESS")
+
     clear_rules("iptables")
     clear_rules("ip6tables")
 
     # always allow connecting to the server itself
-    # this has no IPv6 counterpart (yet)
-    add_rule("iptables", SERVER_IP, "-d")
+    add_rule("iptables", "-d", SERVER_IP, "ACCEPT")
+    if server_ip_v6:
+        add_rule("ip6tables", "-d", server_ip_v6, "ACCEPT")
 
     if args.command == "start":
-        names = parse_config(WHITELIST_PATH)
-        for name in names:
+        for name in config["users"]:
             v4, v6 = get_addresses(name)
             for ip in v4:
-                add_rule("iptables", ip)
+                add_rule("iptables", "-s", ip, list_jump)
             for ip in v6:
-                add_rule("ip6tables", ip)
+                add_rule("ip6tables", "-s", ip, list_jump)
 
-    add_rule("iptables", None)
-    add_rule("ip6tables", None)
+    add_rule("iptables", "-s", None, other_jump)
+    add_rule("ip6tables", "-s", None, other_jump)
 
 
 if __name__ == "__main__":
