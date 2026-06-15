@@ -1,8 +1,10 @@
+set -e
+
 table=$(printf '%d' $(wg show "$2" fwmark))
 
 cmd() {
-  echo "[# wl] $*" >&2
-  "$@"
+  echo "[# wl] $* $EXTRA" >&2
+  eval '"$@"' "$EXTRA"
 }
 
 whitelist() {
@@ -24,10 +26,11 @@ whitelist() {
 
 
 if [ "$1" = "up" ]; then
-  whitelist "-4" "$3"
-  whitelist "-6" "$4"
+  whitelist -4 "$3"
+  whitelist -6 "$4"
 
 elif [ "$1" = "down" ]; then
-  cmd ip -4 route del default table $table 2>/dev/null || true
-  cmd ip -6 route del default table $table 2>/dev/null || true
+  for ip_ver in -4 -6; do
+    EXTRA="2>/dev/null || true" cmd ip $ip_ver route del default table $table
+  done
 fi
