@@ -9,7 +9,6 @@ import configparser
 from ipaddress import ip_address
 from collections import defaultdict
 
-
 WHITELIST_SCRIPT = "/etc/wireguard/whitelist.sh"
 
 
@@ -87,6 +86,7 @@ def main(argv: list[str]) -> None:
         config["Interface"]["PreDown"] = f"{WHITELIST_SCRIPT} down %i"
     else:
         config["Peer"]["AllowedIPs"] = ", ".join(addresses_v4 + addresses_v6)
+    config["Peer"]["PersistentKeepalive"] = "60"
     config.write(sys.stdout)
 
 
