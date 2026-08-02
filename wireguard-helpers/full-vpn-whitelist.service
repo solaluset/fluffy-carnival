@@ -6,8 +6,8 @@ Wants=ufw.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=sh -c "~/.local/bin/full-vpn-whitelist.py start"
-ExecStop=sh -c "~/.local/bin/full-vpn-whitelist.py stop"
+ExecStart=/usr/local/sbin/full-vpn-whitelist.py --algo-path /path start
+ExecStop=/usr/local/sbin/full-vpn-whitelist.py --algo-path /path stop
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target

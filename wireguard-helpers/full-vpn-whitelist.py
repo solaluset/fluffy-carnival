@@ -9,16 +9,12 @@ from pathlib import Path
 from ipaddress import ip_address
 from configparser import ConfigParser
 
-ALGO_PATH = Path("~").expanduser() / "algo"
-CONFIGS_PATH = ALGO_PATH / "configs" / "localhost"
-SERVER_IP = CONFIGS_PATH.readlink().name
-CONFIGS_PATH = CONFIGS_PATH / "wireguard"
-WHITELIST_PATH = ALGO_PATH / "full-vpn-whitelist.txt"
 WHITELIST_CHAIN_NAME = "full-vpn-whitelist"
 
 run_command = functools.partial(subprocess.check_output, text=True)
 
 parser = argparse.ArgumentParser()
+parser.add_argument("--algo-path", type=Path)
 parser.add_argument("command")
 
 
@@ -62,11 +58,11 @@ def _split_ips(ips: str) -> list[str]:
     return [ip for ip in map(str.strip, ips.split(",")) if ip]
 
 
-def get_addresses(name: str) -> tuple[list[str], list[str]]:
+def get_addresses(configs_path: Path, name: str) -> tuple[list[str], list[str]]:
     v4 = []
     v6 = []
     parser = ConfigParser()
-    parser.read(CONFIGS_PATH / (name + ".conf"))
+    parser.read(configs_path / (name + ".conf"))
     for ip in _split_ips(parser["Interface"]["Address"]):
         version = ip_address(ip).version
         if version == 4:
@@ -84,7 +80,13 @@ def main(args: list[str]) -> None:
     if args.command not in ("start", "stop"):
         raise ValueError("unknown command")
 
-    config = parse_config(WHITELIST_PATH)
+    algo_path = args.algo_path or Path("~").expanduser() / "algo"
+    configs_path = algo_path / "configs" / "localhost"
+    server_ip_v4 = configs_path.readlink().name
+    configs_path = configs_path / "wireguard"
+    whitelist_path = algo_path / "full-vpn-whitelist.txt"
+
+    config = parse_config(whitelist_path)
     list_jump = config.get("LIST_JUMP", "ACCEPT")
     other_jump = config.get("OTHER_JUMP", "DROP")
     server_ip_v6 = config.get("IPv6_SERVER_ADDRESS")
@@ -93,13 +95,13 @@ def main(args: list[str]) -> None:
     clear_rules("ip6tables")
 
     # always allow connecting to the server itself
-    add_rule("iptables", "-d", SERVER_IP, "ACCEPT")
+    add_rule("iptables", "-d", server_ip_v4, "ACCEPT")
     if server_ip_v6:
         add_rule("ip6tables", "-d", server_ip_v6, "ACCEPT")
 
     if args.command == "start":
         for name in config["users"]:
-            v4, v6 = get_addresses(name)
+            v4, v6 = get_addresses(configs_path, name)
             for ip in v4:
                 add_rule("iptables", "-s", ip, list_jump)
             for ip in v6:
